@@ -1345,7 +1345,7 @@ function reMessage(p, s){
 }
 /* ============ Reentregas end ============ */
 const SHEET_ID = "13yNLu0uE3Z-HTysBE0wgwvSDXFYa4NyjJcQ5hKt14Z0";
-const FAT_CSV_URL = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&sheet=Faturamento&range=A2:G100000";
+const FAT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR66FBTOWqPYZ8mY1r-7EH9Q4uph3tHi6GP-uplRILVI0cwzGNfS0e75zgagLY_6ViUMWW1WkrODUhq/pub?output=csv";
 function _ckeyJS(s){
   s=(s||'').toString().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   s=s.replace(/['’]/g,' ').replace(/-/g,' ').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
@@ -1416,11 +1416,14 @@ function _applyDATA(D){
   return DATA.months.reduce((a,m)=>a+m.cities.reduce((s,c)=>s+c.value,0),0);
 }
 function _rowsFromMatrix(raw){
-  const head=raw[0].map(x=>(x||'').toString().trim().toLowerCase());
+  // acha a linha de cabeçalho (pode haver título mesclado antes)
+  let hi=0;
+  for(let i=0;i<Math.min(raw.length,8);i++){ const low=raw[i].map(x=>(x||'').toString().trim().toLowerCase()); if(low.includes('cliente')&&low.includes('valor')){ hi=i; break; } }
+  const head=raw[hi].map(x=>(x||'').toString().trim().toLowerCase());
   const find=(ns,d)=>{ for(const n of ns){ const i=head.indexOf(n); if(i>=0)return i; } return d; };
   const ci={data:find(['data'],0),pedido:find(['pedido'],1),cliente:find(['cliente'],2),cidade:find(['cidade'],3),cep:find(['cep'],4),rep:find(['representante','repres'],5),valor:find(['valor'],6)};
   const rows=[];
-  for(let i=1;i<raw.length;i++){ const r=raw[i]; if(!r||r.length<3)continue; rows.push({data:r[ci.data],pedido:r[ci.pedido],cliente:r[ci.cliente],cidade:r[ci.cidade],cep:r[ci.cep],rep:r[ci.rep],valor:r[ci.valor]}); }
+  for(let i=hi+1;i<raw.length;i++){ const r=raw[i]; if(!r||r.length<3)continue; rows.push({data:r[ci.data],pedido:r[ci.pedido],cliente:r[ci.cliente],cidade:r[ci.cidade],cep:r[ci.cep],rep:r[ci.rep],valor:r[ci.valor]}); }
   return rows;
 }
 async function atualizarClientes(){
