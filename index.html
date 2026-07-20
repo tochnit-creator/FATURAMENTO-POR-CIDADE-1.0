@@ -2762,8 +2762,9 @@ function exportCarteiraPDF(idx){
       if(!list.length) return;
       if(y > PH-130){ doc.addPage(); y=60; }
       doc.setFillColor.apply(doc,fill); doc.roundedRect(M,y,PW-2*M,22,5,5,'F');
+      doc.setFillColor.apply(doc,txtColor); doc.circle(M+13,y+11,3,'F');
       doc.setTextColor.apply(doc,txtColor); doc.setFont('helvetica','bold'); doc.setFontSize(11);
-      doc.text(title+'   ('+list.length+')', M+10, y+15);
+      doc.text(title+'   ('+list.length+')', M+24, y+15);
       doc.setFont('helvetica','normal'); doc.setFontSize(9);
       doc.text('Total  '+brl(sum(list)), PW-M-10, y+15, {align:'right'});
       y+=22+4;
@@ -2781,9 +2782,9 @@ function exportCarteiraPDF(idx){
       y=doc.lastAutoTable.finalY+16;
     };
 
-    section('🌱 Novos',       [43,122,80],  [235,247,240], B.novos);
-    section('⚠ Em risco',     [150,110,40], [250,245,232], B.risco);
-    section('📞 A recuperar',  [180,80,60],  [250,240,236], B.recuperar);
+    section('Novos',       [43,122,80],  [235,247,240], B.novos);
+    section('Em risco',     [150,110,40], [250,245,232], B.risco);
+    section('A recuperar',  [180,80,60],  [250,240,236], B.recuperar);
 
     if(!B.novos.length && !B.risco.length && !B.recuperar.length){
       doc.setTextColor.apply(doc,sub); doc.setFont('helvetica','normal'); doc.setFontSize(10);
