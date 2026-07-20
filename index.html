@@ -442,6 +442,17 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
 .rep-det tbody td{padding:9px 8px;font-size:13px}
 .rep-det tbody tr{cursor:default}
 .rep-det tbody tr:hover{background:transparent}
+/* cidade clicável -> clientes do rep */
+.rep-det tbody tr.rc-row{cursor:pointer;transition:.12s}
+.rep-det tbody tr.rc-row:hover{background:var(--gold-dim)}
+.rc-arrow{display:inline-block;width:12px;color:var(--teal);font-size:10px;transition:.15s}
+.rc-hint{color:var(--teal);font-weight:700;font-size:11px}
+.rep-det tbody tr.rc-detail>td{padding:0!important}
+.rc-clis{background:var(--surface);border-left:2px solid var(--teal);margin:0 0 4px}
+.rc-clis table{width:100%}
+.rc-clis thead th{padding:7px 10px!important;font-size:9.5px!important;color:var(--muted2)}
+.rc-clis tbody td{padding:7px 10px!important;font-size:12.5px!important;border-top:1px solid var(--line)}
+.rc-clis .cli-n{font-weight:600;color:var(--text)}
 .alert{border:1px solid var(--rose);border-radius:13px;background:linear-gradient(145deg,rgba(224,139,122,.12),transparent);margin-bottom:18px;overflow:hidden}
 .alert-head{display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer}
 .alert-head .a-ic{font-size:18px}
@@ -1948,6 +1959,31 @@ function repsForPeriod(){
   return {reps,unmatched,labels,benchmarks,monthly,cityMonthly,nMonths:monthLabels.length};
 }
 function toggleRep(el){ el.classList.toggle('open'); }
+/* clientes de UM representante em UMA cidade, somando os meses selecionados */
+function repCityClients(repName, cityKey){
+  const ids=STATE.selected.filter(id=>DATA.citycli&&DATA.citycli[id]);
+  const map=new Map();
+  ids.forEach(id=>{
+    const arr=(DATA.citycli[id]&&DATA.citycli[id][cityKey])?DATA.citycli[id][cityKey]:[];
+    arr.forEach(c=>{
+      if(c.rep!==repName) return;
+      const k=c.name.toUpperCase();
+      let e=map.get(k);
+      if(!e){ e={name:c.name,value:0,orders:0}; map.set(k,e); }
+      e.value+=c.value; e.orders+=c.orders;
+    });
+  });
+  return [...map.values()].sort((a,b)=>b.value-a.value);
+}
+/* abre/fecha a lista de clientes de uma cidade dentro do card do representante */
+function toggleRC(id){
+  const el=document.getElementById(id); if(!el) return;
+  const isHidden = (el.style.display==='none' || el.style.display==='');
+  el.style.display = isHidden ? 'table-row' : 'none';
+  const row=el.previousElementSibling;
+  const arr=row && row.querySelector('.rc-arrow');
+  if(arr) arr.textContent = isHidden ? '▾' : '▸';
+}
 function renderReps(){
   const r=repsForPeriod();
   const per=document.getElementById('repPeriodo');
@@ -1987,10 +2023,25 @@ function renderReps(){
   list.innerHTML = r.reps.map((rep,i)=>{
     const cities=rep.cities.filter(c=>c.key!=='__SEM_CIDADE__');
     const semc=rep.cities.find(c=>c.key==='__SEM_CIDADE__');
-    const rows=rep.cities.map(c=>`<tr><td data-l="Cidade">${c.name}</td>
-      <td data-l="Faturamento" class="val-c">R$ ${BRL2.format(c.value)}</td>
-      <td data-l="Pedidos" class="ord-c">${NUM.format(c.orders)}</td>
-      <td data-l="Clientes">${NUM.format(c.clients)}</td></tr>`).join('');
+    const rows=rep.cities.map((c,ci)=>{
+      const cid=`rc-${i}-${ci}`;
+      const clis=repCityClients(rep.name,c.key);
+      const cliBody = clis.length
+        ? clis.map(cl=>`<tr><td data-l="Cliente" class="cli-n">${cl.name}</td>
+            <td data-l="Faturamento" class="val-c">R$ ${BRL2.format(cl.value)}</td>
+            <td data-l="Pedidos" class="ord-c">${NUM.format(cl.orders)}</td></tr>`).join('')
+        : `<tr><td colspan="3" class="muted-row">Sem clientes identificados nesta cidade no período.</td></tr>`;
+      return `<tr class="rc-row" onclick="toggleRC('${cid}')">
+          <td data-l="Cidade"><span class="rc-arrow">▸</span> ${c.name}</td>
+          <td data-l="Faturamento" class="val-c">R$ ${BRL2.format(c.value)}</td>
+          <td data-l="Pedidos" class="ord-c">${NUM.format(c.orders)}</td>
+          <td data-l="Clientes">${NUM.format(c.clients)} <span class="rc-hint">ver ↗</span></td></tr>
+        <tr class="rc-detail" id="${cid}" style="display:none"><td colspan="4">
+          <div class="rc-clis"><table>
+            <thead><tr><th>Cliente</th><th class="val-c">Faturamento</th><th class="ord-c">Pedidos</th></tr></thead>
+            <tbody>${cliBody}</tbody></table></div>
+        </td></tr>`;
+    }).join('');
     const top=cities.slice(0,3).map(c=>c.name).join(', ');
     return `<div class="rep ${i<3?'top'+(i+1):''}">
       <div class="rep-head" onclick="toggleRep(this.parentElement)">
