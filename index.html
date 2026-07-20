@@ -187,6 +187,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
 .delta{font-weight:700;font-size:13px}
 .spark{display:inline-block;vertical-align:middle;overflow:visible}
 .delta em{font-style:normal;font-weight:600;opacity:.6;font-size:11px}
+.prevval{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:600}
 .trend-cell{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .rep-trend .trend-cell,.rg-trend .trend-cell{margin-top:4px}
 .city-spark{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
@@ -203,6 +204,8 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
 .tag.gold{color:var(--gold);border-color:rgba(216,184,120,.4);background:rgba(216,184,120,.12)}
 .tag.rose{color:var(--rose);border-color:rgba(224,139,122,.4);background:rgba(224,139,122,.12)}
 .tag.mut{color:var(--muted)}
+.cart-pdf{font-size:11px;font-weight:700;color:var(--gold);background:rgba(216,184,120,.12);border:1px solid rgba(216,184,120,.45);border-radius:20px;padding:3px 11px;cursor:pointer;white-space:nowrap;transition:background .15s}
+.cart-pdf:hover{background:rgba(216,184,120,.24)}
 .cart-caret{color:var(--muted);transition:transform .2s}
 .cart-head.open .cart-caret{transform:rotate(180deg)}
 .cart-body{padding:6px 15px 15px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
@@ -2103,7 +2106,8 @@ function toggleRC(id){
 /* ===== Evolução mês a mês: série completa + setinha + mini-gráfico ===== */
 // série mensal de TODOS os meses carregados (não só os filtrados) para um representante
 function repFullSeries(name){
-  return DATA.months.map(m=>{
+  const sel=new Set(STATE.selected);
+  return DATA.months.filter(m=>sel.has(m.id)).map(m=>{
     const blk=DATA.reps[m.id]; if(!blk) return {label:m.label,v:0};
     const rr=blk.reps.find(r=>r.name===name);
     return {label:m.label, v:rr?rr.total:0};
@@ -2111,7 +2115,8 @@ function repFullSeries(name){
 }
 // série mensal completa de uma cidade
 function cityFullSeries(key){
-  return DATA.months.map(m=>{
+  const sel=new Set(STATE.selected);
+  return DATA.months.filter(m=>sel.has(m.id)).map(m=>{
     const c=m.cities.find(x=>x.key===key);
     return {label:m.label, v:c?c.value:0};
   });
@@ -2127,13 +2132,13 @@ function trendDelta(series){
 function trendBadge(series){
   const d=trendDelta(series);
   if(!d) return '';
-  if(d.new) return '<span class="delta up" title="Faturou este mês após não ter faturado no mês anterior">novo ▲</span>';
-  const cls=d.pct>2?'up':d.pct<-2?'down':'flat';
   const la=series[series.length-2].label, lb=series[series.length-1].label;
-  const tip=` title="${lb} vs ${la}: de R$ ${BRL2.format(d.a)} para R$ ${BRL2.format(d.b)}"`;
-  if(cls==='flat') return `<span class="delta flat"${tip}>≈ estável <em>vs mês ant.</em></span>`;
+  const prev=`<span class="prevval" title="Faturamento de ${la}">${la}: R$ ${BRL2.format(d.a)}</span>`;
+  if(d.new) return `<span class="delta up" title="Faturou em ${lb} após ${la} zerado">novo ▲</span> <span class="prevval">${la}: R$ 0,00</span>`;
+  const cls=d.pct>2?'up':d.pct<-2?'down':'flat';
+  if(cls==='flat') return `<span class="delta flat">≈ estável <em>vs mês ant.</em></span> ${prev}`;
   const arw=d.pct>=0?'▲':'▼';
-  return `<span class="delta ${cls}"${tip}>${arw} ${Math.abs(d.pct).toFixed(0)}% <em>vs mês ant.</em></span>`;
+  return `<span class="delta ${cls}">${arw} ${Math.abs(d.pct).toFixed(0)}% <em>vs mês ant.</em></span> ${prev}`;
 }
 // mini-gráfico de linha (sparkline SVG) a partir de série [{label,v}]
 function sparkline(series, opts){
@@ -2257,6 +2262,7 @@ function renderCarteira(){
 
   // ---- carteira por representante ----
   const reps=Object.values(byRep).sort((a,b)=>b.total-a.total);
+  window._CART_REPS=reps;
   const bucket=(list,cls,label,hint)=>{
     if(!list.length) return `<div class="cb"><div class="cb-h ${cls}">${label} <span class="cb-n">0</span></div><div class="muted-row" style="padding:8px 2px">—</div></div>`;
     const shown=list.slice(0,25);
@@ -2270,6 +2276,7 @@ function renderCarteira(){
     return `<div class="cart-rep">
       <div class="cart-head" onclick="var b=document.getElementById('${cid}');b.style.display=b.style.display==='none'?'block':'none';this.classList.toggle('open')">
         <div class="cart-name">${B.rep}</div>
+        <button class="cart-pdf" onclick="event.stopPropagation();exportCarteiraPDF(${i})" title="Baixar a carteira deste representante em PDF">⬇ PDF</button>
         <div class="cart-tags">
           <span class="tag up">${B.novos.length} novos</span>
           <span class="tag gold">${B.risco.length} em risco</span>
@@ -2681,6 +2688,114 @@ function exportReguaPDF(){
     alert('Não foi possível gerar o PDF. Detalhe: '+(err&&err.message?err.message:err));
   }finally{
     if(btn){ btn.disabled=false; btn.textContent='⬇ Exportar PDF'; }
+  }
+}
+
+function exportCarteiraPDF(idx){
+  const B=(window._CART_REPS||[])[idx];
+  if(!B){ alert('Recarregue a aba Carteira e tente novamente.'); return; }
+  if(!window.jspdf || !window.jspdf.jsPDF){ alert('Gerador de PDF ainda carregando. Verifique a conexão e tente novamente.'); return; }
+  if(!DATA.months || DATA.months.length<2){ alert('A carteira precisa de pelo menos 2 meses carregados.'); return; }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'pt', format:'a4'});
+    const PW=doc.internal.pageSize.getWidth(), PH=doc.internal.pageSize.getHeight(), M=40;
+    const gold=[216,184,120], band=[19,25,34], ink=[32,34,40], sub=[120,128,140], line=[228,224,214];
+    const brl=v=>'R$ '+BRL2.format(v);
+    const now=new Date();
+    const dtStr=now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const lastLbl=_mlab(DATA.months[DATA.months.length-1].id), prevLbl=_mlab(DATA.months[DATA.months.length-2].id);
+    const periodo=_mlab(DATA.months[0].id)+' a '+lastLbl;
+    const sum=l=>l.reduce((a,c)=>a+c.total,0);
+
+    // rodapé + faixa de topo nas páginas seguintes
+    const chrome=(d)=>{
+      if(d.pageNumber>1){
+        doc.setFillColor.apply(doc,band); doc.rect(0,0,PW,40,'F');
+        doc.setFillColor.apply(doc,gold); doc.rect(0,40,PW,2,'F');
+        doc.setTextColor.apply(doc,gold); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+        doc.text('Carteira · '+B.rep, M, 26);
+      }
+      const page=doc.internal.getNumberOfPages();
+      doc.setDrawColor.apply(doc,line); doc.setLineWidth(0.5); doc.line(M,PH-30,PW-M,PH-30);
+      doc.setTextColor.apply(doc,sub); doc.setFont('helvetica','normal'); doc.setFontSize(8);
+      doc.text('Carteira gerada automaticamente pelo painel de Faturamento por Cidade  ·  '+dtStr, M, PH-18);
+      doc.text('Página '+d.pageNumber+' de '+page, PW-M, PH-18, {align:'right'});
+    };
+
+    // ---------- cabeçalho ----------
+    doc.setFillColor.apply(doc,band); doc.rect(0,0,PW,96,'F');
+    doc.setFillColor.apply(doc,gold); doc.rect(0,96,PW,3,'F');
+    doc.setTextColor.apply(doc,gold); doc.setFont('helvetica','bold'); doc.setFontSize(19);
+    doc.text('Carteira de Clientes', M, 40);
+    doc.setTextColor(240,235,225); doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text(B.rep, M, 63);
+    doc.setTextColor(200,195,180); doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    doc.text('Período: '+periodo+'   ·   Gerado em '+dtStr, M, 82);
+
+    // ---------- cartões-resumo ----------
+    let y=120;
+    const cards=[
+      {n:B.novos.length,     l:'NOVOS',       txt:[43,122,80],  fill:[235,247,240]},
+      {n:B.risco.length,     l:'EM RISCO',    txt:[150,110,40], fill:[250,245,232]},
+      {n:B.recuperar.length, l:'A RECUPERAR', txt:[180,80,60],  fill:[250,240,236]},
+      {n:B.ativos,           l:'ATIVOS',      txt:[70,80,95],   fill:[240,242,245]}
+    ];
+    const gap=10, bw=(PW-2*M-3*gap)/4;
+    cards.forEach((c,i)=>{
+      const x=M+i*(bw+gap);
+      doc.setFillColor.apply(doc,c.fill); doc.roundedRect(x,y,bw,52,6,6,'F');
+      doc.setTextColor.apply(doc,c.txt); doc.setFont('helvetica','bold'); doc.setFontSize(20);
+      doc.text(String(c.n), x+12, y+30);
+      doc.setFontSize(8.2); doc.setTextColor(90,96,106);
+      doc.text(c.l, x+12, y+44);
+    });
+    y+=52+18;
+
+    // legenda
+    doc.setTextColor.apply(doc,sub); doc.setFont('helvetica','normal'); doc.setFontSize(8.6);
+    doc.text('Novos: 1ª compra em '+lastLbl+' (conquista).    Em risco: compravam e pararam em '+lastLbl+' (última compra em '+prevLbl+').    A recuperar: sem compra há 2+ meses — valem uma ligação.', M, y, {maxWidth:PW-2*M});
+    y+=24;
+
+    // ---------- seções ----------
+    const section=(title, txtColor, fill, list)=>{
+      if(!list.length) return;
+      if(y > PH-130){ doc.addPage(); y=60; }
+      doc.setFillColor.apply(doc,fill); doc.roundedRect(M,y,PW-2*M,22,5,5,'F');
+      doc.setTextColor.apply(doc,txtColor); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+      doc.text(title+'   ('+list.length+')', M+10, y+15);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text('Total  '+brl(sum(list)), PW-M-10, y+15, {align:'right'});
+      y+=22+4;
+      const body=list.map((c,i)=>[String(i+1), c.name, brl(c.total), c.lastLabel]);
+      doc.autoTable({
+        startY:y,
+        head:[['#','Cliente','Faturamento total','Última compra']],
+        body,
+        margin:{left:M,right:M,top:56,bottom:44},
+        styles:{font:'helvetica',fontSize:8.6,cellPadding:5,textColor:ink,lineColor:line,lineWidth:0.4,overflow:'linebreak'},
+        headStyles:{fillColor:band,textColor:gold,fontStyle:'bold',fontSize:8.6},
+        columnStyles:{0:{halign:'center',cellWidth:24,textColor:sub},1:{cellWidth:'auto',fontStyle:'bold'},2:{halign:'right',cellWidth:120},3:{halign:'right',cellWidth:90}},
+        didDrawPage:chrome
+      });
+      y=doc.lastAutoTable.finalY+16;
+    };
+
+    section('🌱 Novos',       [43,122,80],  [235,247,240], B.novos);
+    section('⚠ Em risco',     [150,110,40], [250,245,232], B.risco);
+    section('📞 A recuperar',  [180,80,60],  [250,240,236], B.recuperar);
+
+    if(!B.novos.length && !B.risco.length && !B.recuperar.length){
+      doc.setTextColor.apply(doc,sub); doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      doc.text('Sem movimentações de carteira neste representante no período.', M, y+6);
+      chrome({pageNumber:1});
+    }
+
+    const safe=s=>(s||'').toString().normalize('NFD').replace(/[^\w]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40);
+    doc.save('Carteira_'+safe(B.rep)+'.pdf');
+  }catch(err){
+    console.error(err);
+    alert('Não foi possível gerar o PDF. Detalhe: '+(err&&err.message?err.message:err));
   }
 }
 
