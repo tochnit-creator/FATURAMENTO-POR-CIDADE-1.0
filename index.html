@@ -190,6 +190,37 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
 .trend-cell{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .rep-trend .trend-cell,.rg-trend .trend-cell{margin-top:4px}
 .city-spark{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.risk-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--gold);background:rgba(216,184,120,.14);border:1px solid rgba(216,184,120,.4);border-radius:20px;padding:2px 9px;white-space:nowrap}
+.conc-line{margin:10px 2px 2px;font-size:12.5px;color:var(--muted)}
+.conc-line b{color:var(--text)} .conc-line.hot b{color:var(--gold)}
+.cart-rep{border:1px solid var(--line);border-radius:14px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.cart-head{display:flex;align-items:center;gap:12px;padding:13px 15px;cursor:pointer;flex-wrap:wrap}
+.cart-head:hover{background:rgba(255,255,255,.02)}
+.cart-name{font-weight:700;font-size:15px;color:var(--text)}
+.cart-tags{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.tag{font-size:11px;font-weight:700;border-radius:20px;padding:2px 9px;border:1px solid var(--line)}
+.tag.up{color:var(--green);border-color:rgba(127,201,154,.4);background:rgba(127,201,154,.12)}
+.tag.gold{color:var(--gold);border-color:rgba(216,184,120,.4);background:rgba(216,184,120,.12)}
+.tag.rose{color:var(--rose);border-color:rgba(224,139,122,.4);background:rgba(224,139,122,.12)}
+.tag.mut{color:var(--muted)}
+.cart-caret{color:var(--muted);transition:transform .2s}
+.cart-head.open .cart-caret{transform:rotate(180deg)}
+.cart-body{padding:6px 15px 15px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:760px){ .cart-body{grid-template-columns:1fr} .cart-tags{margin-left:0;width:100%} }
+.cb{background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:11px 12px}
+.cb-h{font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px}
+.cb-h.up{color:var(--green)} .cb-h.gold{color:var(--gold)} .cb-h.rose{color:var(--rose)}
+.cb-n{margin-left:auto;background:rgba(255,255,255,.06);border-radius:20px;padding:1px 8px;font-size:12px;color:var(--text)}
+.cb-sub{font-size:11px;color:var(--muted);margin:4px 0 8px;line-height:1.35}
+.cli-r{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:12.5px}
+.cli-r:first-of-type{border-top:none}
+.cli-nm{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cli-v{color:var(--text);font-weight:600;white-space:nowrap;flex-shrink:0}
+.cli-last{color:var(--muted);font-weight:400;font-size:11px}
+.dup-g{border-bottom:1px solid var(--line);padding:9px 0}
+.dup-sig{font-size:11px;color:var(--gold);font-weight:700;margin-bottom:5px}
+.dup-m{display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:12.5px}
+.dup-n{color:var(--text)} .dup-meta{color:var(--muted);white-space:nowrap;flex-shrink:0}
 .delta.up{color:var(--green)} .delta.down{color:var(--rose)} .delta.flat{color:var(--muted)}
 .muted-row{color:var(--muted2);font-size:12.5px;text-align:center;padding:26px}
 
@@ -711,6 +742,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
     <button class="tab" data-tab="route">Comparar rota</button>
     <button class="tab" data-tab="reps">Representantes</button>
     <button class="tab" data-tab="regua">Termômetro</button>
+    <button class="tab" data-tab="carteira">Carteira</button>
     <button class="tab" data-tab="semcad">Sem cadastro</button>
     <button class="tab" data-tab="reentrega">Reentregas</button>
     <button class="tab" data-tab="citydetail" style="display:none">Cidade</button>
@@ -824,6 +856,15 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
   </div>
 
   <!-- REPRESENTANTES -->
+  <!-- CARTEIRA DE CLIENTES (novos / risco / recuperar + duplicados) -->
+  <div class="panel" id="tab-carteira">
+    <div class="section">
+      <div class="sec-head"><h3>Carteira de clientes</h3></div>
+      <div class="desc">Por representante: <b style="color:var(--green)">novos</b> (conquistas), <b style="color:var(--gold)">em risco</b> (compravam e pararam agora) e <b style="color:var(--rose)">a recuperar</b> (sumiram há 2+ meses — valem uma ligação). No topo, um detector de <b>possíveis duplicados</b> na base. Usa todos os meses carregados.</div>
+      <div id="carteiraBody"></div>
+    </div>
+  </div>
+
   <div class="panel" id="tab-reps">
     <div class="section">
       <div class="sec-head"><h3>Ranking de representantes</h3></div>
@@ -2116,6 +2157,135 @@ function trendCell(series){
   return (sp||tb) ? `<div class="trend-cell">${sp}${tb}</div>` : '';
 }
 
+/* ===== Bloco 2: inteligência de clientes (carteira / concentração / duplicados) ===== */
+function _mlab(mid){ return MLAB_FULL[(mid||'').slice(5,7)]||mid; }
+
+// histórico completo por cliente (chave normalizada), a partir de DATA.citycli
+function clientHistory(){
+  const H={};
+  DATA.months.forEach(m=>{
+    const cc=DATA.citycli[m.id]; if(!cc) return;
+    Object.values(cc).forEach(list=>list.forEach(e=>{
+      const nk=_nclientJS(e.name); if(!nk) return;
+      const h=H[nk]||(H[nk]={key:nk,name:e.name,rep:e.rep||'SEM REPRESENTANTE',byMonth:{},total:0});
+      const bm=h.byMonth[m.id]||(h.byMonth[m.id]={value:0,orders:0});
+      bm.value+=e.value; bm.orders+=e.orders;
+      h.total+=e.value; h.rep=e.rep||h.rep; h.name=e.name; // rep/nome mais recentes (meses em ordem)
+    }));
+  });
+  const ids=DATA.months.map(m=>m.id);
+  Object.values(H).forEach(h=>{ h.months=ids.filter(id=>h.byMonth[id]); h.first=h.months[0]; h.last=h.months[h.months.length-1]; });
+  return H;
+}
+
+// classifica cada cliente em novo / em risco / a recuperar, por representante
+function classifyClients(H){
+  const M=DATA.months.map(m=>m.id), L=M.length-1;
+  const byRep={};
+  Object.values(H).forEach(h=>{
+    const fi=M.indexOf(h.first), li=M.indexOf(h.last), rp=h.rep||'SEM REPRESENTANTE';
+    const B=byRep[rp]||(byRep[rp]={rep:rp,novos:[],risco:[],recuperar:[],ativos:0,total:0});
+    B.total+=h.total;
+    const rec={name:h.name, total:h.total, lastVal:h.byMonth[h.last].value, lastLabel:_mlab(h.last), nMonths:h.months.length};
+    if(fi===L) B.novos.push(rec);
+    else if(li===L) B.ativos++;
+    else if(li===L-1) B.risco.push(rec);
+    else B.recuperar.push(rec);
+  });
+  Object.values(byRep).forEach(B=>['novos','risco','recuperar'].forEach(k=>B[k].sort((a,b)=>b.total-a.total)));
+  return byRep;
+}
+
+// detector de possíveis duplicados (mesma pessoa cadastrada de formas diferentes)
+function findDuplicates(H){
+  const groups={};
+  Object.values(H).forEach(h=>{
+    const toks=_nclientJS(h.name).split(' ').filter(t=>t && !/^\d+$/.test(t)); // ignora blocos só de números (CPF/CNPJ)
+    if(toks.length<2) return;
+    const sig=toks.slice(0,2).join(' ');
+    (groups[sig]=groups[sig]||[]).push(h);
+  });
+  return Object.values(groups).filter(a=>a.length>1)
+    .map(a=>({members:a.slice().sort((x,y)=>y.total-x.total), total:a.reduce((s,x)=>s+x.total,0), n:a.length}))
+    .sort((a,b)=>b.total-a.total);
+}
+
+// totais por cliente dentro de cada representante, no período selecionado (para concentração)
+function allRepClientTotals(selIds){
+  const out={};
+  selIds.forEach(id=>{
+    const cc=DATA.citycli[id]; if(!cc) return;
+    Object.values(cc).forEach(list=>list.forEach(e=>{
+      const rp=e.rep||'SEM REPRESENTANTE', nk=_nclientJS(e.name); if(!nk) return;
+      const R=out[rp]||(out[rp]={}); const c=R[nk]||(R[nk]={name:e.name,value:0,orders:0});
+      c.value+=e.value; c.orders+=e.orders;
+    }));
+  });
+  const res={}; Object.entries(out).forEach(([rp,R])=>res[rp]=Object.values(R).sort((a,b)=>b.value-a.value));
+  return res;
+}
+
+function renderCarteira(){
+  const box=document.getElementById('carteiraBody'); if(!box) return;
+  if(!DATA.months || DATA.months.length<2){
+    box.innerHTML='<div class="muted-row" style="padding:34px 20px">A carteira (novos, em risco, a recuperar) precisa de <b>pelo menos 2 meses</b> carregados para comparar. Selecione mais meses no filtro do topo.</div>';
+    return;
+  }
+  const H=clientHistory(), byRep=classifyClients(H), dups=findDuplicates(H);
+  const lastLbl=_mlab(DATA.months[DATA.months.length-1].id);
+  const prevLbl=_mlab(DATA.months[DATA.months.length-2].id);
+
+  // ---- duplicados ----
+  let dupHTML;
+  if(dups.length){
+    const dupTotal=dups.reduce((s,g)=>s+g.total,0);
+    const rows=dups.slice(0,60).map(g=>`<div class="dup-g">
+      <div class="dup-sig">${g.n} cadastros parecidos · R$ ${BRL2.format(g.total)}</div>
+      ${g.members.map(m=>`<div class="dup-m"><span class="dup-n">${m.name}</span><span class="dup-meta">${m.rep} · R$ ${BRL2.format(m.total)}</span></div>`).join('')}
+    </div>`).join('');
+    dupHTML=`<div class="alert" style="margin-bottom:16px">
+      <div class="alert-head" onclick="this.parentElement.classList.toggle('open')">
+        <span class="a-ic">🧩</span>
+        <span class="a-tx"><b>${dups.length} grupos de possíveis duplicados</b> — o mesmo cliente cadastrado de formas diferentes (nome com/sem CPF, abreviado, etc.). Isso infla a contagem de clientes e distorce o Termômetro. R$ ${BRL2.format(dupTotal)} envolvidos. Toque para revisar.</span>
+        <span class="a-caret">▾</span></div>
+      <div class="alert-det">${rows}${dups.length>60?`<div class="muted-row">…e mais ${dups.length-60} grupos.</div>`:''}</div></div>`;
+  } else {
+    dupHTML=`<div class="alert" style="border-color:rgba(127,201,154,.5);background:linear-gradient(145deg,rgba(127,201,154,.12),transparent);margin-bottom:16px">
+      <div class="alert-head" style="cursor:default"><span class="a-ic">✅</span>
+      <span class="a-tx">Nenhum duplicado óbvio detectado na base.</span></div></div>`;
+  }
+
+  // ---- carteira por representante ----
+  const reps=Object.values(byRep).sort((a,b)=>b.total-a.total);
+  const bucket=(list,cls,label,hint)=>{
+    if(!list.length) return `<div class="cb"><div class="cb-h ${cls}">${label} <span class="cb-n">0</span></div><div class="muted-row" style="padding:8px 2px">—</div></div>`;
+    const shown=list.slice(0,25);
+    return `<div class="cb"><div class="cb-h ${cls}">${label} <span class="cb-n">${list.length}</span></div>
+      <div class="cb-sub">${hint}</div>
+      ${shown.map(c=>`<div class="cli-r"><span class="cli-nm">${c.name}</span><span class="cli-v">R$ ${BRL2.format(c.total)}<span class="cli-last"> · últ. ${c.lastLabel}</span></span></div>`).join('')}
+      ${list.length>25?`<div class="muted-row" style="padding:6px 2px">…e mais ${list.length-25}.</div>`:''}</div>`;
+  };
+  const repHTML=reps.map((B,i)=>{
+    const cid='cart-'+i;
+    return `<div class="cart-rep">
+      <div class="cart-head" onclick="var b=document.getElementById('${cid}');b.style.display=b.style.display==='none'?'block':'none';this.classList.toggle('open')">
+        <div class="cart-name">${B.rep}</div>
+        <div class="cart-tags">
+          <span class="tag up">${B.novos.length} novos</span>
+          <span class="tag gold">${B.risco.length} em risco</span>
+          <span class="tag rose">${B.recuperar.length} a recuperar</span>
+          <span class="tag mut">${B.ativos} ativos</span></div>
+        <span class="cart-caret">▾</span></div>
+      <div class="cart-body" id="${cid}" style="display:none">
+        ${bucket(B.novos,'up','🌱 Novos','1ª compra em '+lastLbl+' — conquista, vale acompanhar.')}
+        ${bucket(B.risco,'gold','⚠️ Em risco','Compravam e pararam em '+lastLbl+' (última compra em '+prevLbl+').')}
+        ${bucket(B.recuperar,'rose','📞 A recuperar','Sem compra há 2+ meses — valem uma ligação.')}
+      </div></div>`;
+  }).join('');
+
+  box.innerHTML = dupHTML + (repHTML || '<div class="muted-row" style="padding:30px 20px">Sem dados de carteira no período.</div>');
+}
+
 function renderReps(){
   const r=repsForPeriod();
   const per=document.getElementById('repPeriodo');
@@ -2129,6 +2299,7 @@ function renderReps(){
     return;
   }
   per.textContent = '· '+r.labels.join(' + ');
+  const RCT=allRepClientTotals(STATE.selected);
 
   // observação automática do período
   const obs = buildObservation();
@@ -2154,6 +2325,11 @@ function renderReps(){
   // ranking
   list.innerHTML = r.reps.map((rep,i)=>{
     const repSeries=repFullSeries(rep.name);
+    const ct=RCT[rep.name]||[];
+    const top1=ct[0], share1=(top1&&rep.total>0)?top1.value/rep.total:0;
+    const share2=rep.total>0?((ct[0]?ct[0].value:0)+(ct[1]?ct[1].value:0))/rep.total:0;
+    const riskChip = share1>=0.5 ? `<span class="risk-chip" title="Maior cliente: ${top1.name} — R$ ${BRL2.format(top1.value)} de R$ ${BRL2.format(rep.total)}">⚠ ${Math.round(share1*100)}% em 1 cliente</span>` : '';
+    const concLine = ct.length ? `<div class="conc-line ${share1>=0.5?'hot':''}">Concentração: <b>${Math.round(share1*100)}%</b> no maior cliente${top1?' ('+top1.name+')':''} · <b>${Math.round(share2*100)}%</b> nos 2 maiores.</div>` : '';
     const cities=rep.cities.filter(c=>c.key!=='__SEM_CIDADE__');
     const semc=rep.cities.find(c=>c.key==='__SEM_CIDADE__');
     const rows=rep.cities.map((c,ci)=>{
@@ -2181,12 +2357,12 @@ function renderReps(){
         <div class="rep-rank">${i+1}</div>
         <div class="rep-id"><div class="rep-name">${rep.name}</div>
           <div class="rep-sub">${NUM.format(rep.clients)} clientes · ${NUM.format(rep.orders)} pedidos · ${cities.length} cidade${cities.length!==1?'s':''}${top?' · '+top:''}</div>
-          <div class="rep-trend">${trendCell(repSeries)}</div></div>
+          <div class="rep-trend">${trendCell(repSeries)}${riskChip}</div></div>
         <div class="rep-val">R$ ${BRL2.format(rep.total)}</div>
         <div class="rep-caret">▾</div></div>
       <div class="rep-det"><div class="tbl-wrap">
         <table><thead><tr><th>Cidade</th><th>Faturamento</th><th>Pedidos</th><th>Clientes</th></tr></thead>
-        <tbody>${rows}</tbody></table></div>${repSuggestion(rep, r)}</div>
+        <tbody>${rows}</tbody></table></div>${concLine}${repSuggestion(rep, r)}</div>
     </div>`;
   }).join('');
 }
@@ -2799,7 +2975,7 @@ function renderMap(){
 }
 
 /* ============ Tabs + init ============ */
-function refresh(){ renderChips(); renderOverview(); renderExec(); renderCities(); renderRoutePicker(); renderRouteResult(); renderReps(); renderRegua(); renderSemcad(); renderReent(); if(document.getElementById('tab-map').classList.contains('on')) renderMap(); }
+function refresh(){ renderChips(); renderOverview(); renderExec(); renderCities(); renderRoutePicker(); renderRouteResult(); renderReps(); renderRegua(); renderCarteira(); renderSemcad(); renderReent(); if(document.getElementById('tab-map').classList.contains('on')) renderMap(); }
 
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
