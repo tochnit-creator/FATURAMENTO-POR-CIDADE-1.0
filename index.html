@@ -185,6 +185,11 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
 .val-c{color:var(--gold);font-family:'Fraunces';font-weight:500;white-space:nowrap}
 .ord-c{color:var(--teal);font-variant-numeric:tabular-nums}
 .delta{font-weight:700;font-size:13px}
+.spark{display:inline-block;vertical-align:middle;overflow:visible}
+.delta em{font-style:normal;font-weight:600;opacity:.6;font-size:11px}
+.trend-cell{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.rep-trend .trend-cell,.rg-trend .trend-cell{margin-top:4px}
+.city-spark{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .delta.up{color:var(--green)} .delta.down{color:var(--rose)} .delta.flat{color:var(--muted)}
 .muted-row{color:var(--muted2);font-size:12.5px;text-align:center;padding:26px}
 
@@ -1027,7 +1032,7 @@ function renderCities(){
       <td data-l="Faturamento" class="val-c">R$ ${BRL2.format(c.value)}</td>
       <td data-l="Pedidos" class="ord-c">${NUM.format(c.orders)}</td>
       <td data-l="Ticket médio">R$ ${BRL2.format(c.ticket)}</td>
-      <td data-l="Variação faturam."><span class="delta ${dc}">${d}</span></td>`;
+      <td data-l="Variação faturam."><span class="city-spark">${DATA.months.length>1?sparkline(cityFullSeries(c.key),{w:60,h:22}):''}<span class="delta ${dc}">${d}</span></span></td>`;
     tb.appendChild(tr);
   });
 }
@@ -2054,6 +2059,63 @@ function toggleRC(id){
   const arr=row && row.querySelector('.rc-arrow');
   if(arr) arr.textContent = isHidden ? '▾' : '▸';
 }
+/* ===== Evolução mês a mês: série completa + setinha + mini-gráfico ===== */
+// série mensal de TODOS os meses carregados (não só os filtrados) para um representante
+function repFullSeries(name){
+  return DATA.months.map(m=>{
+    const blk=DATA.reps[m.id]; if(!blk) return {label:m.label,v:0};
+    const rr=blk.reps.find(r=>r.name===name);
+    return {label:m.label, v:rr?rr.total:0};
+  });
+}
+// série mensal completa de uma cidade
+function cityFullSeries(key){
+  return DATA.months.map(m=>{
+    const c=m.cities.find(x=>x.key===key);
+    return {label:m.label, v:c?c.value:0};
+  });
+}
+// variação do último mês vs o mês imediatamente anterior
+function trendDelta(series){
+  if(!series || series.length<2) return null;
+  const b=series[series.length-1].v, a=series[series.length-2].v;
+  if(a===0) return b>0?{pct:100,new:true,a,b}:null;
+  return {pct:(b-a)/a*100, new:false, a, b};
+}
+// selinho ▲/▼ % vs mês anterior
+function trendBadge(series){
+  const d=trendDelta(series);
+  if(!d) return '';
+  if(d.new) return '<span class="delta up" title="Faturou este mês após não ter faturado no mês anterior">novo ▲</span>';
+  const cls=d.pct>2?'up':d.pct<-2?'down':'flat';
+  const la=series[series.length-2].label, lb=series[series.length-1].label;
+  const tip=` title="${lb} vs ${la}: de R$ ${BRL2.format(d.a)} para R$ ${BRL2.format(d.b)}"`;
+  if(cls==='flat') return `<span class="delta flat"${tip}>≈ estável <em>vs mês ant.</em></span>`;
+  const arw=d.pct>=0?'▲':'▼';
+  return `<span class="delta ${cls}"${tip}>${arw} ${Math.abs(d.pct).toFixed(0)}% <em>vs mês ant.</em></span>`;
+}
+// mini-gráfico de linha (sparkline SVG) a partir de série [{label,v}]
+function sparkline(series, opts){
+  opts=opts||{};
+  const pts=(series||[]).map(s=>s.v), n=pts.length;
+  if(n<2) return '';
+  const W=opts.w||90, H=opts.h||26, pad=3;
+  const max=Math.max(...pts), min=Math.min(...pts), rng=(max-min)||1;
+  const x=i=> pad + i*(W-2*pad)/(n-1);
+  const y=v=> H-pad - ((v-min)/rng)*(H-2*pad);
+  const line=pts.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ');
+  const area=`M${x(0).toFixed(1)} ${(H-pad).toFixed(1)} `+pts.map((v,i)=>'L'+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ')+` L${x(n-1).toFixed(1)} ${(H-pad).toFixed(1)} Z`;
+  const up = pts[n-1] >= pts[n-2], col = up ? 'var(--green)' : 'var(--rose)';
+  const lastX=x(n-1).toFixed(1), lastY=y(pts[n-1]).toFixed(1);
+  const labels=(series||[]).map(s=>s.label).join(' · ');
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><title>Evolução mensal (${labels})</title><path d="${area}" fill="${col}" opacity=".10"/><path d="${line}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lastX}" cy="${lastY}" r="2.2" fill="${col}"/></svg>`;
+}
+// wrapper: sparkline + selinho (só desenha se houver histórico)
+function trendCell(series){
+  const sp=sparkline(series), tb=trendBadge(series);
+  return (sp||tb) ? `<div class="trend-cell">${sp}${tb}</div>` : '';
+}
+
 function renderReps(){
   const r=repsForPeriod();
   const per=document.getElementById('repPeriodo');
@@ -2091,6 +2153,7 @@ function renderReps(){
 
   // ranking
   list.innerHTML = r.reps.map((rep,i)=>{
+    const repSeries=repFullSeries(rep.name);
     const cities=rep.cities.filter(c=>c.key!=='__SEM_CIDADE__');
     const semc=rep.cities.find(c=>c.key==='__SEM_CIDADE__');
     const rows=rep.cities.map((c,ci)=>{
@@ -2117,7 +2180,8 @@ function renderReps(){
       <div class="rep-head" onclick="toggleRep(this.parentElement)">
         <div class="rep-rank">${i+1}</div>
         <div class="rep-id"><div class="rep-name">${rep.name}</div>
-          <div class="rep-sub">${NUM.format(rep.clients)} clientes · ${NUM.format(rep.orders)} pedidos · ${cities.length} cidade${cities.length!==1?'s':''}${top?' · '+top:''}</div></div>
+          <div class="rep-sub">${NUM.format(rep.clients)} clientes · ${NUM.format(rep.orders)} pedidos · ${cities.length} cidade${cities.length!==1?'s':''}${top?' · '+top:''}</div>
+          <div class="rep-trend">${trendCell(repSeries)}</div></div>
         <div class="rep-val">R$ ${BRL2.format(rep.total)}</div>
         <div class="rep-caret">▾</div></div>
       <div class="rep-det"><div class="tbl-wrap">
@@ -2279,7 +2343,8 @@ function renderReguaView(){
     return `<div class="rg-card">
       <div class="rk" style="background:${TIER[x.tier].color}22;color:${TIER[x.tier].color}">${x.rank}</div>
       <div class="who"><div class="nm">${x.name}</div>
-        <div class="rs">${x.orders} pedidos · ${citiesBtn}</div></div>
+        <div class="rs">${x.orders} pedidos · ${citiesBtn}</div>
+        <div class="rg-trend">${trendCell(repFullSeries(x.name))}</div></div>
       <div class="rg-idx" title="Índice de desempenho comparado à equipe. 100% = na mediana. ${Math.round(x.index*100)}% ≈ ${mult(x.index)}× a referência da equipe.">
         <div class="v" style="color:${TIER[x.tier].color}">${Math.round(x.index*100)}%</div><div class="k">índice vs média</div></div>
       <div class="rg-metrics">
