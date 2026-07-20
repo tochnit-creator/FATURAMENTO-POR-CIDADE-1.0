@@ -2035,7 +2035,7 @@ function renderReps(){
           <td data-l="Cidade"><span class="rc-arrow">▸</span> ${c.name}</td>
           <td data-l="Faturamento" class="val-c">R$ ${BRL2.format(c.value)}</td>
           <td data-l="Pedidos" class="ord-c">${NUM.format(c.orders)}</td>
-          <td data-l="Clientes">${NUM.format(c.clients)} <span class="rc-hint">ver ↗</span></td></tr>
+          <td data-l="Clientes">${NUM.format(clis.length||c.clients)} <span class="rc-hint">ver ↗</span></td></tr>
         <tr class="rc-detail" id="${cid}" style="display:none"><td colspan="4">
           <div class="rc-clis"><table>
             <thead><tr><th>Cliente</th><th class="val-c">Faturamento</th><th class="ord-c">Pedidos</th></tr></thead>
