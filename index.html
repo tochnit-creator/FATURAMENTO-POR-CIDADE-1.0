@@ -188,6 +188,8 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold-2)}
 .spark{display:inline-block;vertical-align:middle;overflow:visible}
 .delta em{font-style:normal;font-weight:600;opacity:.6;font-size:11px}
 .prevval{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:600}
+.curval{font-size:11px;color:var(--text);white-space:nowrap;font-weight:700}
+.trend-arrow{font-size:11px;color:var(--muted2);font-weight:700;margin:0 1px}
 .trend-cell{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .rep-trend .trend-cell,.rg-trend .trend-cell{margin-top:4px}
 .city-spark{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
@@ -2134,11 +2136,13 @@ function trendBadge(series){
   if(!d) return '';
   const la=series[series.length-2].label, lb=series[series.length-1].label;
   const prev=`<span class="prevval" title="Faturamento de ${la}">${la}: R$ ${BRL2.format(d.a)}</span>`;
-  if(d.new) return `<span class="delta up" title="Faturou em ${lb} após ${la} zerado">novo ▲</span> <span class="prevval">${la}: R$ 0,00</span>`;
+  const cur=`<span class="curval" title="Faturamento de ${lb}">${lb}: R$ ${BRL2.format(d.b)}</span>`;
+  const pair=`${prev}<span class="trend-arrow">→</span>${cur}`;
+  if(d.new) return `<span class="delta up" title="Faturou em ${lb} após ${la} zerado">novo ▲</span> <span class="prevval">${la}: R$ 0,00</span><span class="trend-arrow">→</span>${cur}`;
   const cls=d.pct>2?'up':d.pct<-2?'down':'flat';
-  if(cls==='flat') return `<span class="delta flat">≈ estável <em>vs mês ant.</em></span> ${prev}`;
+  if(cls==='flat') return `<span class="delta flat">≈ estável <em>vs mês ant.</em></span> ${pair}`;
   const arw=d.pct>=0?'▲':'▼';
-  return `<span class="delta ${cls}">${arw} ${Math.abs(d.pct).toFixed(0)}% <em>vs mês ant.</em></span> ${prev}`;
+  return `<span class="delta ${cls}">${arw} ${Math.abs(d.pct).toFixed(0)}% <em>vs mês ant.</em></span> ${pair}`;
 }
 // mini-gráfico de linha (sparkline SVG) a partir de série [{label,v}]
 function sparkline(series, opts){
