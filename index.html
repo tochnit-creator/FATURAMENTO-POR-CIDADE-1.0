@@ -1517,6 +1517,8 @@ function reMessage(p, s){
 /* ============ Reentregas end ============ */
 const SHEET_ID = "13yNLu0uE3Z-HTysBE0wgwvSDXFYa4NyjJcQ5hKt14Z0";
 const FAT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR66FBTOWqPYZ8mY1r-7EH9Q4uph3tHi6GP-uplRILVI0cwzGNfS0e75zgagLY_6ViUMWW1WkrODUhq/pub?output=csv";
+/* Busca a aba "reentrega" pelo NOME, na MESMA planilha (SHEET_ID) — não depende de publicar essa aba separadamente, só da planilha estar com Compartilhar > "Qualquer pessoa com o link" > Leitor. */
+const REENT_CSV_URL = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&sheet=reentrega";
 function _ckeyJS(s){
   s=(s||'').toString().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   s=s.replace(/['’]/g,' ').replace(/-/g,' ').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
@@ -1576,6 +1578,81 @@ function buildDATAfromRows(rows){
   const clients={}; for(const [ck,set] of Object.entries(clientsByCity)) clients[ck]=set.size;
   return {months,reps,citycli,clients};
 }
+/* ===== Reentregas: motor para montar a partir da aba "reentrega" ===== */
+function _isoFromBR(v){
+  if(v==null) return null;
+  const s=v.toString().trim();
+  let m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m=s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[0];
+  return null;
+}
+function _rowsFromReentregaMatrix(raw){
+  let hi=0;
+  for(let i=0;i<Math.min(raw.length,8);i++){ const low=raw[i].map(x=>(x||'').toString().trim().toLowerCase()); if(low.includes('cliente')&&low.some(x=>x.indexOf('valor')>=0)){ hi=i; break; } }
+  const head=raw[hi].map(x=>(x||'').toString().trim().toLowerCase());
+  const find=(ns,d)=>{ for(const n of ns){ const i=head.findIndex(h=>h.indexOf(n)>=0); if(i>=0)return i; } return d; };
+  const ci={rota:find(['rota'],-1),data:find(['emiss','data'],-1),cliente:find(['cliente'],-1),cidade:find(['cidade'],-1),valor:find(['valor'],-1),pedido:find(['pedido'],-1),motivo:find(['motivo'],-1),transportador:find(['transportador'],-1)};
+  const rows=[];
+  for(let i=hi+1;i<raw.length;i++){ const r=raw[i]; if(!r||r.length<3)continue;
+    rows.push({rota:ci.rota>=0?r[ci.rota]:'',data:ci.data>=0?r[ci.data]:'',cliente:ci.cliente>=0?r[ci.cliente]:'',cidade:ci.cidade>=0?r[ci.cidade]:'',valor:ci.valor>=0?r[ci.valor]:'',pedido:ci.pedido>=0?r[ci.pedido]:'',motivo:ci.motivo>=0?r[ci.motivo]:'',transportador:ci.transportador>=0?r[ci.transportador]:''});
+  }
+  return {rows, ci};
+}
+function buildReentregaFromRows(rows){
+  const reent={}; const monthsSet={};
+  rows.forEach(r=>{
+    const cliRaw=(r.cliente||'').toString().trim(); if(!cliRaw) return;
+    const v=_numJS(r.valor); if(isNaN(v)) return;
+    const iso=_isoFromBR(r.data); if(!iso) return;
+    monthsSet[iso.slice(0,7)]=true;
+    const key=cliRaw.toUpperCase();
+    if(!reent[key]) reent[key]=[];
+    reent[key].push([iso, Math.round(v*100)/100, (r.motivo||'').toString().trim()||'—']);
+  });
+  const monthIds=Object.keys(monthsSet).sort();
+  const months=monthIds.map(mid=>({id:mid,label:(MLAB_FULL[mid.slice(5,7)]||mid.slice(5,7))+' '+mid.slice(0,4)}));
+  return {reent, months};
+}
+function buildClientIndexFromFaturamento(){
+  const idx={};
+  const cc=DATA.citycli||{};
+  Object.keys(cc).forEach(mid=>{
+    const cityMap=cc[mid]||{};
+    Object.keys(cityMap).forEach(ck=>{
+      (cityMap[ck]||[]).forEach(e=>{
+        const nk=(e.name||'').toString().trim().toUpperCase(); if(!nk) return;
+        if(!idx[nk]) idx[nk]={n:e.name,rep:e.rep||'',cidade:_dispCity(ck),fat:0};
+        idx[nk].fat+=(e.value||0);
+        if(!idx[nk].rep) idx[nk].rep=e.rep||'';
+      });
+    });
+  });
+  return idx;
+}
+function buildPosFromLatestMonth(){
+  const ids=(DATA.months||[]).map(m=>m.id); if(!ids.length) return [];
+  const latest=ids[ids.length-1];
+  const cc=(DATA.citycli||{})[latest]||{};
+  const idx=buildClientIndexFromFaturamento();
+  const arr=[];
+  Object.keys(cc).forEach(ck=>{
+    (cc[ck]||[]).forEach(e=>{
+      const nk=(e.name||'').toString().trim().toUpperCase();
+      arr.push({n:e.name, k:nk, valor:e.value||0, cidade:_dispCity(ck), rep:e.rep||'', fat:(idx[nk]&&idx[nk].fat)||0});
+    });
+  });
+  return arr;
+}
+function _applyReentregaData(payload){
+  DATA.reentrega = { pos: buildPosFromLatestMonth(), reent: payload.reent, months: payload.months };
+  REENT.months=null; REENT.sel=null;
+  const tabEl=document.getElementById('tab-reentrega');
+  if(tabEl && tabEl.classList.contains('on')) renderReent();
+  return {clients:Object.keys(payload.reent).length, months:payload.months.length};
+}
+/* ============ Reentregas: motor end ============ */
 function _applyDATA(D){
   if(!D.months.length) throw new Error('nenhum mês reconhecido (confira a coluna Data)');
   DATA.months=D.months; DATA.reps=D.reps; DATA.citycli=D.citycli; DATA.clients=D.clients;
@@ -1600,6 +1677,7 @@ function _rowsFromMatrix(raw){
 async function atualizarClientes(){
   const btn=document.getElementById('updBtn'), st=document.getElementById('updStatus');
   btn.classList.add('loading'); st.className='upd-status'; st.textContent='Buscando planilha…';
+  const msgs=[];
   try{
     const url=FAT_CSV_URL+'&_t='+Date.now();
     const resp=await fetch(url,{cache:'no-store'});
@@ -1609,12 +1687,30 @@ async function atualizarClientes(){
     if(raw.length<2) throw new Error('planilha vazia');
     const rows=_rowsFromMatrix(raw);
     const tot=_applyDATA(buildDATAfromRows(rows));
-    st.className='upd-status ok';
-    st.textContent='✓ '+DATA.months.length+' meses · R$ '+tot.toLocaleString('pt-BR',{maximumFractionDigits:0})+' carregados da planilha.';
+    msgs.push('✓ '+DATA.months.length+' meses · R$ '+tot.toLocaleString('pt-BR',{maximumFractionDigits:0})+' (faturamento)');
   }catch(e){
-    st.className='upd-status err';
-    st.textContent='Leitura online falhou ('+e.message+'). Use "importar arquivo" abaixo, ou verifique internet/compartilhamento.';
-  }finally{ btn.classList.remove('loading'); }
+    msgs.push('✗ faturamento: '+e.message+' — use "importar arquivo" abaixo, ou verifique internet/compartilhamento.');
+  }
+  try{
+    if(!REENT_CSV_URL || REENT_CSV_URL.indexOf('http')!==0) throw new Error('link da aba "reentrega" ainda não configurado (veja REENT_CSV_URL no código)');
+    const url2=REENT_CSV_URL+(REENT_CSV_URL.indexOf('?')>=0?'&':'?')+'_t='+Date.now();
+    const resp2=await fetch(url2,{cache:'no-store'});
+    if(!resp2.ok) throw new Error('HTTP '+resp2.status);
+    const txt2=await resp2.text();
+    const raw2=_parseCSV(txt2);
+    if(raw2.length<2) throw new Error('aba vazia');
+    const {rows:rows2}=_rowsFromReentregaMatrix(raw2);
+    if(!rows2.some(r=>r.motivo)) throw new Error('o link publicado aponta para a aba errada (sem coluna de motivo) — publique a aba "reentrega" isoladamente');
+    const built=buildReentregaFromRows(rows2);
+    if(!built.months.length) throw new Error('nenhuma data reconhecida na aba reentrega');
+    const info=_applyReentregaData(built);
+    msgs.push('✓ '+info.clients+' clientes com reentrega · '+info.months+' meses (reentregas)');
+  }catch(e){
+    msgs.push('✗ reentregas: '+e.message);
+  }
+  st.className = msgs.some(m=>m.startsWith('✗')) ? 'upd-status err' : 'upd-status ok';
+  st.textContent = msgs.join(' · ');
+  btn.classList.remove('loading');
 }
 function importFatFile(input){
   const f=input.files&&input.files[0]; if(!f) return;
