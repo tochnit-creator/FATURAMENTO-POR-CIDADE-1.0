@@ -1517,8 +1517,8 @@ function reMessage(p, s){
 /* ============ Reentregas end ============ */
 const SHEET_ID = "13yNLu0uE3Z-HTysBE0wgwvSDXFYa4NyjJcQ5hKt14Z0";
 const FAT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR66FBTOWqPYZ8mY1r-7EH9Q4uph3tHi6GP-uplRILVI0cwzGNfS0e75zgagLY_6ViUMWW1WkrODUhq/pub?output=csv";
-/* Busca a aba "reentrega" pelo NOME, na MESMA planilha (SHEET_ID) — não depende de publicar essa aba separadamente, só da planilha estar com Compartilhar > "Qualquer pessoa com o link" > Leitor. */
-const REENT_CSV_URL = "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&sheet=reentrega";
+/* Link publicado especificamente da aba "reentrega" (confirmado funcionando). */
+const REENT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR66FBTOWqPYZ8mY1r-7EH9Q4uph3tHi6GP-uplRILVI0cwzGNfS0e75zgagLY_6ViUMWW1WkrODUhq/pub?gid=193614900&single=true&output=csv";
 function _ckeyJS(s){
   s=(s||'').toString().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
   s=s.replace(/['’]/g,' ').replace(/-/g,' ').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
@@ -1697,10 +1697,12 @@ async function atualizarClientes(){
     const resp2=await fetch(url2,{cache:'no-store'});
     if(!resp2.ok) throw new Error('HTTP '+resp2.status);
     const txt2=await resp2.text();
+    const looksHtml = /^\s*<(!doctype|html)/i.test(txt2) || txt2.indexOf('accounts.google.com')>=0;
+    if(looksHtml) throw new Error('a planilha respondeu com uma página de login/erro em vez de CSV — abra o Sheets, clique em "Compartilhar" (não "Publicar na Web") e mude para "Qualquer pessoa com o link → Leitor"');
     const raw2=_parseCSV(txt2);
-    if(raw2.length<2) throw new Error('aba vazia');
+    if(raw2.length<2) throw new Error('aba vazia ou não encontrada — confira se o nome da aba é exatamente "reentrega" (minúsculo)');
     const {rows:rows2}=_rowsFromReentregaMatrix(raw2);
-    if(!rows2.some(r=>r.motivo)) throw new Error('o link publicado aponta para a aba errada (sem coluna de motivo) — publique a aba "reentrega" isoladamente');
+    if(!rows2.some(r=>r.motivo)) throw new Error('recebi dados sem coluna de motivo — confira se o nome da aba é exatamente "reentrega" e se ela tem uma coluna "Motivo"');
     const built=buildReentregaFromRows(rows2);
     if(!built.months.length) throw new Error('nenhuma data reconhecida na aba reentrega');
     const info=_applyReentregaData(built);
