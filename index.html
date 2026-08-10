@@ -1345,7 +1345,7 @@ function repSuggestion(rep, ctx){
 }
 
 /* ============ Aba Reentregas ============ */
-let REENT={months:null, thr:4, sort:'nRe', dir:'desc', sel:null, selCity:null};
+let REENT={months:null, thr:4, sort:'nRe', dir:'desc', sel:null, selCity:null, cityListOpen:false};
 function reNorm(s){
   if(!s) return '';
   s=s.toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
@@ -1392,18 +1392,33 @@ function reCityStats(){
   });
   return Object.values(map).sort((a,b)=>b.n-a.n);
 }
-function reCityCardsHTML(stats){
+function reCitySummaryHTML(stats){
   if(!stats.length) return '';
-  const cards=stats.map(c=>{
+  const totalN=stats.reduce((a,c)=>a+c.n,0);
+  const open=REENT.cityListOpen;
+  const head=`<div class="kpi" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px" onclick="reToggleCityList()">
+    <div><div class="k-lbl">Cidades mais afetadas</div>
+      <div class="k-sub" style="margin-top:6px">${NUM.format(stats.length)} cidades · ${NUM.format(totalN)} pedidos no período · maior gargalo: <b style="color:var(--teal)">${stats[0].cidade}</b></div></div>
+    <div style="font-size:18px;color:var(--muted);transition:transform .15s;transform:rotate(${open?180:0}deg)">▾</div>
+  </div>`;
+  if(!open) return head;
+  const maxN=stats[0].n||1;
+  const rows=stats.map((c,i)=>{
+    const pct=Math.max(4,Math.round(c.n/maxN*100));
     const on=REENT.selCity===c.cidade;
-    return `<div class="kpi teal" style="cursor:pointer;${on?'border-color:var(--teal);box-shadow:0 10px 28px -16px rgba(0,0,0,.7)':''}" onclick="reToggleCity('${c.cidade.replace(/'/g,"\\'")}')">
-      <div class="k-lbl">${c.cidade}</div>
-      <div class="k-val teal">${NUM.format(c.n)}</div>
-      <div class="k-sub">${c.n>1?'pedidos':'pedido'} · R$ ${BRL2.format(c.val)}</div>
+    return `<div style="cursor:pointer;padding:6px 4px;border-radius:8px;${on?'background:rgba(255,255,255,.04)':''}" onclick="event.stopPropagation();reToggleCity('${c.cidade.replace(/'/g,"\\'")}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px">
+        <span style="display:flex;align-items:center;min-width:0"><span class="rankbadge ${i<3?'top':''}">${i+1}</span><b style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cidade}</b></span>
+        <span style="font-size:12.5px;color:var(--muted);white-space:nowrap">${NUM.format(c.n)} ped. · R$ ${BRL2.format(c.val)}</span>
+      </div>
+      <div style="height:7px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden">
+        <div style="height:100%;width:${pct}%;border-radius:5px;background:var(--teal)"></div>
+      </div>
     </div>`;
   }).join('');
-  return `<div class="dr-sec-t" style="margin-top:4px">Reentregas por cidade — maiores gargalos</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin:10px 0 18px">${cards}</div>`;
+  return `${head}<div class="tbl-wrap" style="margin-top:8px;padding:12px 14px;max-height:420px;overflow-y:auto">
+    <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
+  </div>`;
 }
 function reCityDetailHTML(cidade, stats){
   const c=stats.find(x=>x.cidade===cidade);
@@ -1417,7 +1432,7 @@ function reCityDetailHTML(cidade, stats){
     <td data-l="Transportador">${it.transportador}</td>
     <td data-l="Data">${it.data?it.data.split('-').reverse().join('/'):'—'}</td>
     <td data-l="Valor" class="val-c">R$ ${BRL2.format(it.valor)}</td></tr>`).join('');
-  return `<div class="re-detail" id="reCityDetailBox" style="margin-bottom:18px">
+  return `<div class="re-detail" id="reCityDetailBox" style="margin:12px 0 18px">
     <div class="rd-head"><div><div class="dr-kicker">Reentregas em</div><div class="rd-name">${cidade}</div>
       <div class="rd-meta">${NUM.format(c.n)} ${c.n>1?'pedidos':'pedido'} · R$ ${BRL2.format(c.val)}</div></div>
       <button class="minibtn" onclick="reToggleCity('${cidade.replace(/'/g,"\\'")}')">fechar ✕</button></div>
@@ -1426,6 +1441,7 @@ function reCityDetailHTML(cidade, stats){
       <tbody>${rows||'<tr><td colspan=7 class="muted-row">Sem reentregas.</td></tr>'}</tbody>
     </table></div></div>`;
 }
+function reToggleCityList(){ REENT.cityListOpen=!REENT.cityListOpen; if(!REENT.cityListOpen) REENT.selCity=null; renderReent(); }
 function reToggleCity(cidade){
   REENT.selCity = (REENT.selCity===cidade) ? null : cidade;
   renderReent();
@@ -1485,7 +1501,7 @@ function renderReent(){
   // cards de gargalo por cidade (dentro do mesmo filtro de período)
   const cityStats=reCityStats();
   if(REENT.selCity && !cityStats.some(c=>c.cidade===REENT.selCity)) REENT.selCity=null;
-  const cityCardsHtml=reCityCardsHTML(cityStats);
+  const cityCardsHtml=reCitySummaryHTML(cityStats);
   const cityDetailHtml=REENT.selCity ? reCityDetailHTML(REENT.selCity, cityStats) : '';
 
   box.innerHTML=`
@@ -1501,7 +1517,7 @@ function renderReent(){
       <tbody>${trs||'<tr><td colspan=5 class="muted-row">Sem reentregas no período.</td></tr>'}</tbody>
     </table></div>
     <div id="reDetail"></div>
-    <div class="mkt-note" style="margin-top:12px">Mostrando <b>todas as reentregas</b> de <b>${periodoLbl}</b> (${NUM.format(totRe)} reentregas · ${NUM.format(cliRe)} clientes), direto da aba "reentrega" da planilha. Toque num card de cidade para ver os pedidos, ou num cliente para ver o histórico completo.</div>`;
+    <div class="mkt-note" style="margin-top:12px">Mostrando <b>todas as reentregas</b> de <b>${periodoLbl}</b> (${NUM.format(totRe)} reentregas · ${NUM.format(cliRe)} clientes), direto da aba "reentrega" da planilha. Toque em "Cidades mais afetadas" para ver o ranking, depois numa cidade para ver os pedidos, ou num cliente para ver o histórico completo.</div>`;
 
   if(REENT.sel){ const still=rows.find(r=>r.k===REENT.sel); if(still) reRenderDetail(REENT.sel); else reClose(); }
 }
