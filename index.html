@@ -1386,10 +1386,8 @@ function renderReent(){
   document.getElementById('reChips').innerHTML=chips;
   document.getElementById('reThr').value=REENT.thr;
 
-  // índice do arquivo do dia (para enriquecer rep/cidade e marcar "hoje")
+  // índice com cidade/transportador vindos direto da própria aba "reentrega"
   const posIdx=rePosIndex();
-  const posKeys=new Set(Object.keys(posIdx));
-  const diaTot=posKeys.size; // clientes DISTINTOS no arquivo do dia
 
   // ==== GUIADO PELO MÊS: todos os clientes com reentrega no período selecionado ====
   const set=new Set(REENT.months);
@@ -1399,7 +1397,7 @@ function renderReent(){
     if(!arr.length) return; // só entra quem teve reentrega no período
     const nk=reNorm(key); const info=posIdx[nk]||{};
     rows.push({ k:key, n:info.n||reTitle(key), rep:info.rep||'', cidade:info.cidade||'',
-      fat:info.fat||0, hoje:posKeys.has(nk), nRe:arr.length, valRe:arr.reduce((a,o)=>a+o[1],0) });
+      fat:info.fat||0, nRe:arr.length, valRe:arr.reduce((a,o)=>a+o[1],0) });
   });
 
   // ordenação (n e rep são texto; demais numéricos)
@@ -1420,10 +1418,9 @@ function renderReent(){
 
   const trs=rows.map((r)=>{
     const flag = r.nRe>=REENT.thr ? '<span class="re-badge alert">alerta</span>' : (r.nRe>0?'<span class="re-badge warn">'+r.nRe+'</span>':'<span class="re-badge ok">0</span>');
-    const hojeTag = r.hoje ? ' <span class="re-badge warn" title="Também está no arquivo de entrega de hoje">hoje</span>' : '';
     return `<tr onclick="reOpen('${r.k.replace(/'/g,"\\'")}')">
-      <td data-l="Cliente">${r.n}${hojeTag}</td>
-      <td data-l="Representante">${r.rep||'—'}</td>
+      <td data-l="Cliente">${r.n}</td>
+      <td data-l="Transportador">${r.rep||'—'}</td>
       <td data-l="Cidade">${r.cidade||'—'}</td>
       <td data-l="Reentregas" class="ord-c">${flag}</td>
       <td data-l="Valor reentregas" class="val-c">${r.valRe?'R$ '+BRL2.format(r.valRe):'—'}</td></tr>`;
@@ -1436,11 +1433,11 @@ function renderReent(){
       <div class="kpi"><div class="k-lbl">Reentregas no período</div><div class="k-val teal">${NUM.format(totRe)}</div><div class="k-sub">${NUM.format(cliRe)} clientes · R$ ${BRL2.format(totVal)}</div></div>
     </div>
     <div class="tbl-wrap" style="margin-top:14px"><table class="ctbl">
-      <thead><tr>${th('n','Cliente')}${th('rep','Representante')}<th>Cidade</th>${th('nRe','Reentregas','ord-c')}${th('valRe','Valor reentregas','val-c')}</tr></thead>
+      <thead><tr>${th('n','Cliente')}${th('rep','Transportador')}<th>Cidade</th>${th('nRe','Reentregas','ord-c')}${th('valRe','Valor reentregas','val-c')}</tr></thead>
       <tbody>${trs||'<tr><td colspan=5 class="muted-row">Sem reentregas no período.</td></tr>'}</tbody>
     </table></div>
     <div id="reDetail"></div>
-    <div class="mkt-note" style="margin-top:12px">Mostrando <b>todas as reentregas</b> de <b>${periodoLbl}</b> (${NUM.format(totRe)} reentregas · ${NUM.format(cliRe)} clientes). Quem tem <span class="re-badge warn">hoje</span> também está no arquivo de entrega do dia. Toque num cliente para ver datas, motivos e a análise.</div>`;
+    <div class="mkt-note" style="margin-top:12px">Mostrando <b>todas as reentregas</b> de <b>${periodoLbl}</b> (${NUM.format(totRe)} reentregas · ${NUM.format(cliRe)} clientes), direto da aba "reentrega" da planilha. Toque num cliente para ver datas, motivos e rota.</div>`;
 
   if(REENT.sel){ const still=rows.find(r=>r.k===REENT.sel); if(still) reRenderDetail(REENT.sel); else reClose(); }
 }
@@ -1469,17 +1466,19 @@ function reRenderDetail(key){
   const list=s.list.slice().sort((a,b)=>b[0].localeCompare(a[0]));
   const rows=list.map(o=>`<tr>
     <td data-l="Data">${o[0]?o[0].split('-').reverse().join('/'):'—'}</td>
+    <td data-l="Rota">${o[4]||'—'}</td>
+    <td data-l="Pedido">${o[3]||'—'}</td>
     <td data-l="Motivo">${o[2]||'—'}</td>
+    <td data-l="Transportador">${o[5]||'—'}</td>
     <td data-l="Valor" class="val-c">R$ ${BRL2.format(o[1])}</td></tr>`).join('');
   const nome=info.n||reTitle(key);
   const meta=[];
-  if(info.rep) meta.push('Representante: <b>'+info.rep+'</b>');
+  if(info.rep) meta.push('Transportador: <b>'+info.rep+'</b>');
   if(info.cidade) meta.push(info.cidade);
-  if(info.valor) meta.push('pedido de hoje R$ '+BRL2.format(info.valor));
-  const msg=reMessage({rep:info.rep||'', fat:info.fat||0}, s);
+  const msg=reMessage({rep:info.rep||''}, s);
   el.innerHTML=`<div class="re-detail">
     <div class="rd-head"><div><div class="dr-kicker">Histórico de reentregas</div><div class="rd-name">${nome}</div>
-      <div class="rd-meta">${meta.join(' · ')||'Cliente fora do arquivo de hoje'}</div></div>
+      <div class="rd-meta">${meta.join(' · ')||'—'}</div></div>
       <button class="minibtn" onclick="reClose()">fechar ✕</button></div>
     <div class="kpis citykpi" style="margin:12px 0">
       <div class="kpi"><div class="k-lbl">Reentregas no período</div><div class="k-val" style="color:${s.n>=REENT.thr?'var(--rose)':'var(--text)'}">${NUM.format(s.n)}</div></div>
@@ -1488,29 +1487,22 @@ function reRenderDetail(key){
     <div class="suggest-box"><div class="sb-h"><span class="dot"></span>Análise sugestiva</div><p>${msg.text}</p><span class="re-tag ${msg.tier}">${msg.label}</span></div>
     <div class="dr-sec-t" style="margin-top:14px">Reentregas (${list.length})</div>
     <div class="tbl-wrap"><table class="ctbl">
-      <thead><tr><th>Data</th><th>Motivo</th><th>Valor</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan=3 class="muted-row">Sem reentregas no período.</td></tr>'}</tbody>
+      <thead><tr><th>Data</th><th>Rota</th><th>Pedido</th><th>Motivo</th><th>Transportador</th><th>Valor</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan=6 class="muted-row">Sem reentregas no período.</td></tr>'}</tbody>
     </table></div></div>`;
 }
 function reClose(){ REENT.sel=null; const el=document.getElementById('reDetail'); if(el) el.innerHTML=''; }
 function reMessage(p, s){
-  const fat=p.fat||0; const nRe=s.n;
-  const potHigh = fat>=60000, potMid = fat>=15000;
-  const period=REENT.months.length, manyRe = nRe>=REENT.thr, someRe = nRe>0;
+  const nRe=s.n;
+  const manyRe = nRe>=REENT.thr, someRe = nRe>0;
   let tier,label,t;
   if(!someRe){ return {tier:'ok', label:'Sem reentregas', text:`Sem reentregas no período para este cliente — a operação de entrega está ok com ele.`}; }
-  if(manyRe && potHigh){
-    tier='alert'; label='Cliente importante em risco';
-    t=`Cliente de <b>bom potencial</b> (faturamento relevante na base), mas com <b>muitos índices de reentrega</b> nos meses filtrados: foram <b>${nRe} reentregas</b> (R$ ${BRL2.format(s.val)}). Atenção redobrada — erros recorrentes aqui podem custar uma conta importante. Vale acionar a logística${p.rep?' e avisar o representante '+p.rep.split(' ')[0]:''}.`;
-  } else if(manyRe && !potHigh){
-    tier='alert'; label='Estamos errando muito';
-    t=`Este cliente pode <b>não ser de grande potencial</b>, mas <b>estamos errando bastante com ele</b>: ${nRe} reentregas no período (R$ ${BRL2.format(s.val)}). Mesmo sem ser prioridade comercial, o desgaste é real — vale revisar a rota/operação para parar de reentregar.`;
-  } else if(someRe && potHigh){
-    tier='warn'; label='Cliente importante, vigiar';
-    t=`Cliente relevante e com algumas reentregas (${nRe}) no período. Ainda não é crítico, mas como é uma conta de peso, vale acompanhar para não virar recorrência.`;
+  if(manyRe){
+    tier='alert'; label='Atenção — reentregas recorrentes';
+    t=`Este cliente teve <b>${nRe} reentregas</b> no período (R$ ${BRL2.format(s.val)}) — acima do limite de alerta. Vale revisar a rota/operação${p.rep?' e avisar o transportador '+p.rep.split(' ')[0]:''} para entender o padrão e evitar que se repita.`;
   } else {
     tier='warn'; label='Acompanhar';
-    t=`${nRe} reentrega(s) no período (R$ ${BRL2.format(s.val)}). Volume baixo e cliente de menor representatividade — acompanhar sem alarme, mas registrar o motivo para identificar padrão.`;
+    t=`${nRe} reentrega(s) no período (R$ ${BRL2.format(s.val)}). Volume baixo — acompanhar sem alarme, mas registrar o motivo para identificar padrão.`;
   }
   return {tier,label,text:t};
 }
@@ -1601,52 +1593,29 @@ function _rowsFromReentregaMatrix(raw){
   return {rows, ci};
 }
 function buildReentregaFromRows(rows){
-  const reent={}; const monthsSet={};
+  const reent={}; const monthsSet={}; const posMap={};
   rows.forEach(r=>{
     const cliRaw=(r.cliente||'').toString().trim(); if(!cliRaw) return;
     const v=_numJS(r.valor); if(isNaN(v)) return;
     const iso=_isoFromBR(r.data); if(!iso) return;
     monthsSet[iso.slice(0,7)]=true;
     const key=cliRaw.toUpperCase();
+    const cidade=(r.cidade||'').toString().trim();
+    const rota=(r.rota||'').toString().trim();
+    const pedido=(r.pedido||'').toString().trim();
+    const transp=(r.transportador||'').toString().trim();
     if(!reent[key]) reent[key]=[];
-    reent[key].push([iso, Math.round(v*100)/100, (r.motivo||'').toString().trim()||'—']);
+    reent[key].push([iso, Math.round(v*100)/100, (r.motivo||'').toString().trim()||'—', pedido, rota, transp, cidade]);
+    const prev=posMap[key];
+    if(!prev || iso>=prev.iso){ posMap[key]={n:_tcJS(cliRaw), k:key, cidade:cidade?_tcJS(cidade):'', transportador:transp, iso}; }
   });
   const monthIds=Object.keys(monthsSet).sort();
   const months=monthIds.map(mid=>({id:mid,label:(MLAB_FULL[mid.slice(5,7)]||mid.slice(5,7))+' '+mid.slice(0,4)}));
-  return {reent, months};
-}
-function buildClientIndexFromFaturamento(){
-  const idx={};
-  const cc=DATA.citycli||{};
-  Object.keys(cc).forEach(mid=>{
-    const cityMap=cc[mid]||{};
-    Object.keys(cityMap).forEach(ck=>{
-      (cityMap[ck]||[]).forEach(e=>{
-        const nk=(e.name||'').toString().trim().toUpperCase(); if(!nk) return;
-        if(!idx[nk]) idx[nk]={n:e.name,rep:e.rep||'',cidade:_dispCity(ck),fat:0};
-        idx[nk].fat+=(e.value||0);
-        if(!idx[nk].rep) idx[nk].rep=e.rep||'';
-      });
-    });
-  });
-  return idx;
-}
-function buildPosFromLatestMonth(){
-  const ids=(DATA.months||[]).map(m=>m.id); if(!ids.length) return [];
-  const latest=ids[ids.length-1];
-  const cc=(DATA.citycli||{})[latest]||{};
-  const idx=buildClientIndexFromFaturamento();
-  const arr=[];
-  Object.keys(cc).forEach(ck=>{
-    (cc[ck]||[]).forEach(e=>{
-      const nk=(e.name||'').toString().trim().toUpperCase();
-      arr.push({n:e.name, k:nk, valor:e.value||0, cidade:_dispCity(ck), rep:e.rep||'', fat:(idx[nk]&&idx[nk].fat)||0});
-    });
-  });
-  return arr;
+  const pos=Object.values(posMap).map(p=>({n:p.n,k:p.k,valor:0,cidade:p.cidade,rep:p.transportador,fat:0}));
+  return {reent, months, pos};
 }
 function _applyReentregaData(payload){
-  DATA.reentrega = { pos: buildPosFromLatestMonth(), reent: payload.reent, months: payload.months };
+  DATA.reentrega = { pos: payload.pos, reent: payload.reent, months: payload.months };
   REENT.months=null; REENT.sel=null;
   const tabEl=document.getElementById('tab-reentrega');
   if(tabEl && tabEl.classList.contains('on')) renderReent();
